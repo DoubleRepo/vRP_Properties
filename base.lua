@@ -19,101 +19,61 @@ Tunnel.bindInterface("vRP_properties",vRPps)
 -- load language 
 local lang = Lang.new(module("vrp", "cfg/lang/"..config.lang) or {})
 
-
--- sql
-
---MySQL.createCommand("vRP/property_tables", [[
---CREATE TABLE IF NOT EXISTS vrp_user_properties(
---  user_id INTEGER,
---  property VARCHAR(100),
---  number INTEGER,
---	sales INT,
---	earned INT,
---	employees INT,
---  CONSTRAINT pk_user_homes PRIMARY KEY(user_id),
---  CONSTRAINT fk_user_homes_users FOREIGN KEY(user_id) REFERENCES vrp_users(id) ON DELETE CASCADE,
---  UNIQUE(property,number)
---);
---]])
-
---MySQL.createCommand("vRP/get_paddress","")
---MySQL.createCommand("vRP/get_property_owner","")
 --MySQL.createCommand("vRP/rm_paddress","DELETE FROM vrp_user_properties WHERE user_id = @user_id")
 --MySQL.createCommand("vRP/set_paddress","REPLACE INTO vrp_user_properties(user_id,property,number) VALUES(@user_id,@property,@number)")
 --MySQL.createCommand("vRP/sell_property","UPDATE vrp_user_properties SET user_id = @user_id, property = @property, number = @number WHERE user_id = @oldUser, property = @property, number = @number")
 
 
---MySQL.createCommand("vRP/get_property_sales","")
---MySQL.createCommand("vRP/get_property_earned","")
---MySQL.createCommand("vRP/set_property_info","")
-
-
-
--- api
+--
 local components = {}
+--
+
 -- property_Employeetables data tables (logger storage, saved to database)
-vRPps.property_Employeetables = {} 
+--
+
+vRPps.property_Employeetables = {}
+
 function vRPps.property_employees(property)
   return vRPps.property_Employeetables[property]
 end
 
--- property_Salarytables data tables (logger storage, saved to database) ----
-vRPps.property_Salarytables = {} 
+-- property_Salarytables data tables (logger storage, saved to database)
+--
+
+vRPps.property_Salarytables = {}
+
 function vRPps.property_salary(property)
   return vRPps.property_Salarytables[property]
 end
 
 -- property_locks data tables (logger storage, saved to database)
-vRPps.property_locks = {} 
+--
+
+vRPps.property_locks = {}
+
 function vRPps.propertyGetlock(property)
   return vRPps.property_locks[property]
 end
 
--- Functions retrieving the table information
-function vRPps.propertyGetlockStatus(property)
-  if vRPps.property_locks[property] == "yes" then 
-	current = "closed"
-	option = "open"
-	new = "no"
-	numberrr = 0
-  else 
-	current = "opened"
-	option = "close"
-	new = "yes"
-	numberrr = 1
+-- Base functions to save tables
+
+-- Save server data from property table to db
+function vRPps.SaveTables(property)
+  if vRPps.property_Employeetables[property] == nil then
+    local employees = vRPps.property_employees(property)
+	MySQL.Async.execute('UPDATE vrp_user_properties SET employees = @employees WHERE property = @property', {['@employees'] = employees, ['@property'] = property})
   end
-  return current,option,new,numberrr
+  if vRPps.property_Salarytables[property] == nil then
+    local salary = vRPps.property_salary(property)
+	MySQL.Async.execute('UPDATE vrp_user_properties SET salary = @salary WHERE property = @property', {['@salary'] = salary, ['@property'] = property})
+  end
+  if vRPps.property_locks[property] == nil then
+    local locked = vRPps.propertyGetlock(property)
+	MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = locked, ['@property'] = property})
+  end
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
---------------------- business options -------------------
---------------------- business options -------------------
--- cbreturn property info (sales or earned) or nil
-function vRPps.getPriceadjustment(property, cbr) --,cbr)
-  local task = Task(cbr)
-  MySQL.Async.fetchAll('SELECT price_adjustment FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
-	task({result[1].price_adjustment})
-  end)
-end
-
--- set property info (sales and earned)
-function vRPps.setPriceadjustment(property,price)
-  MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price WHERE property = @property', {['@price'] = price, ['@property'] = property})
-end
-
-
+ 
+-- Functions retrieving the table information from the database
 -- Get locked data from property @ property
 function vRPps.getPropertyLock(property)
   if vRPps.property_locks[property] == nil then
@@ -149,6 +109,55 @@ function vRPps.getSalary(property)
 	end)
   end
 end
+
+
+-- Functions retrieving the table information to use
+function vRPps.propertyGetlockStatus(property)
+  if vRPps.property_locks[property] == "yes" then 
+	current = "closed"
+	option = "open"
+	new = "no"
+	numberrr = 0
+  else 
+	current = "opened"
+	option = "close"
+	new = "yes"
+	numberrr = 1
+  end
+  return current,option,new,numberrr
+end
+
+
+
+
+
+
+-- Functions "setting" the table information
+
+
+
+
+
+
+
+
+--------------------- business options -------------------
+--------------------- business options -------------------
+-- cbreturn property info (sales or earned) or nil
+function vRPps.getPriceadjustment(property, cbr) --,cbr)
+  local task = Task(cbr)
+  MySQL.Async.fetchAll('SELECT price_adjustment FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
+	task({result[1].price_adjustment})
+  end)
+end
+
+-- set property info (sales and earned)
+function vRPps.setPriceadjustment(property,price)
+  MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price WHERE property = @property', {['@price'] = price, ['@property'] = property})
+end
+
+
+
 
 -- set property info (sales and earned)
 function vRPps.setPropertyLock(property,locked)
@@ -543,14 +552,12 @@ end
 -- build the property entry menu
 local function build_entry_menu(user_id, property_name)
   local property = cfg.propertys[property_name]
-  local nicename = property.nice_name
   local menu = {name=property_name,css={top="75px",header_color="rgba(0,255,125,0.75)"}}
 
-  -- intercom, used to enter in a property
-  menu["Enter: "..nicename..""] = {function(player,choice)
+  menu["Enter: "..property.nice_name..""] = {function(player,choice)
       vRPps.getUserBypAddress(property_name,function(huser_id)
         if huser_id ~= nil then
-		    if vRPps.propertyGetlock(property) ~= "yes" then --  or vRPps.isEmployee(property_name,user_id)huser_id == user_id or  
+		    if huser_id == user_id or vRPps.propertyGetlock(property) ~= "yes" or vRPps.isEmployee(property_name,user_id) then 
 			  vRPps.accessProperty(user_id, property_name, function(ok)
 				if not ok then
 				  vRPclient.notify(player,{lang.property.intercom.not_available()})
@@ -573,7 +580,6 @@ local function build_entry_menu(user_id, property_name)
 		     vRP.request({player,"Do you want to buy this property?",15,function(player,ok)
 			  if ok then
 				if vRP.tryPayment({user_id, property.buy_price}) then
-				  -- bought, set address
 				  vRPps.setUserpAddress(user_id, property_name, number)
 				  vRPclient.notify(player,{lang.property.buy.bought()})
 				else
@@ -650,7 +656,6 @@ local function build_entry_menu(user_id, property_name)
 			  end
 			end})
 		  else		
-			-- sold, give sell price, remove address
 			vRP.giveMoney({user_id, property.sell_price})
 			vRPps.removeUserpAddress(user_id)
 			vRPclient.notify(player,{"~r~"..lang.property.sell.sold().."+$"..property.sell_price.."!"})
@@ -676,7 +681,7 @@ local function build_client_propertys(source)
 
       local function entry_enter(player,area)
         local user_id = vRP.getUserId({player})
-        if user_id ~= nil and vRP.hasPermissions({user_id,v.permissions or {}}) then
+        if user_id ~= nil then
           vRP.openMenu({source,build_entry_menu(user_id, k)})
         end
       end
@@ -714,20 +719,39 @@ AddEventHandler("vRP:playerLeave",function(user_id, player)
 end)
 
 
+function task_save_datatables()
+  TriggerEvent("vRP:save")
+
+  Debug.pbegin("vRP save property datatables")
+    for k,v in pairs(cfg.propertys) do
+      vRPps.getUserBypAddress(k,function(var)
+        if var ~= nil then
+		  vRPps.SaveTables(k)
+		  print("Saving property datatables")
+	    end
+	  end)
+    end
+
+  Debug.pend()
+  SetTimeout(config.save_interval*1000, task_save_datatables)
+end
 
 function task_update_tables()
-print("Run Table Task")
   MySQL.ready(function ()
     for k,v in pairs(cfg.propertys) do
-      vRPps.getUserBypAddress(k,function(huser_id)
-        if huser_id ~= nil then
+      vRPps.getUserBypAddress(k,function(var)
+        if var ~= nil then
 		  vRPps.getEmployees(k)
 		  vRPps.getPropertyLock(k)
 		  vRPps.getSalary(k)
-		  print("updating property data "..k.." tables")
 	    end
 	  end)
     end
   end)
+  SetTimeout(config.save_interval*1000, task_save_datatables)
 end
 SetTimeout(5000, task_update_tables)
+
+
+
+
