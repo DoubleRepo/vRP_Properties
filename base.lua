@@ -51,26 +51,25 @@ local lang = Lang.new(module("vrp", "cfg/lang/"..config.lang) or {})
 
 -- api
 local components = {}
-
-vRPps.property_Etables = {} -- property_Etables data tables (logger storage, saved to database)
-
+-- property_Employeetables data tables (logger storage, saved to database)
+vRPps.property_Employeetables = {} 
 function vRPps.property_employees(property)
-  return vRPps.property_Etables[property]
+  return vRPps.property_Employeetables[property]
 end
 
----- property_Salarytables data tables (logger storage, saved to database) ----
+-- property_Salarytables data tables (logger storage, saved to database) ----
 vRPps.property_Salarytables = {} 
-
 function vRPps.property_salary(property)
   return vRPps.property_Salarytables[property]
 end
 
-vRPps.property_locks = {} -- property_Etables data tables (logger storage, saved to database)
-
+-- property_locks data tables (logger storage, saved to database)
+vRPps.property_locks = {} 
 function vRPps.propertyGetlock(property)
   return vRPps.property_locks[property]
 end
 
+-- Functions retrieving the table information
 function vRPps.propertyGetlockStatus(property)
   if vRPps.property_locks[property] == "yes" then 
 	current = "closed"
@@ -85,6 +84,19 @@ function vRPps.propertyGetlockStatus(property)
   end
   return current,option,new,numberrr
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 --------------------- business options -------------------
 --------------------- business options -------------------
@@ -102,7 +114,7 @@ function vRPps.setPriceadjustment(property,price)
 end
 
 
--- cbreturn property info (sales or earned) or nil
+-- Get locked data from property @ property
 function vRPps.getPropertyLock(property)
   if vRPps.property_locks[property] == nil then
 	vRPps.property_locks[property] = {}
@@ -112,20 +124,14 @@ function vRPps.getPropertyLock(property)
   end
 end
 
--- set property info (sales and earned)
-function vRPps.setPropertyLock(property,locked)
-  vRPps.property_locks[property] = locked
-  MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = locked, ['@property'] = property})
-end
-
 -- Get Employees from property
 function vRPps.getEmployees(property)
-  if vRPps.property_Etables[property] == nil then
-	vRPps.property_Etables[property] = {}
+  if vRPps.property_Employeetables[property] == nil then
+	vRPps.property_Employeetables[property] = {}
 	MySQL.Async.fetchAll('SELECT employees FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	  local etable = json.decode(result[1].employees)
 	  if type(etable) == "table" then 
-	    vRPps.property_Etables[property] = etable
+	    vRPps.property_Employeetables[property] = etable
 	  end
 	end)
   end
@@ -143,12 +149,20 @@ function vRPps.getSalary(property)
 	end)
   end
 end
+
+-- set property info (sales and earned)
+function vRPps.setPropertyLock(property,locked)
+  vRPps.property_locks[property] = locked
+  MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = locked, ['@property'] = property})
+end
+
+
 -- check if the user has a specific group
 function vRPps.isEmployee(property,user_id)
-  if vRPps.property_Etables[property] == nil then
+  if vRPps.property_Employeetables[property] == nil then
 	vRPps.getEmployees(property)
   end
-    local data = vRPps.property_Etables[property]
+    local data = vRPps.property_Employeetables[property]
 	if type(data) == "table" then 
       for k,v in pairs(data.employee) do
 	    if tonumber(k) == tonumber(user_id) then
@@ -717,7 +731,7 @@ end)
 
 
 function task_update_tables()
-print("Run Table Task Update")
+print("Run Table Task")
   MySQL.ready(function ()
     for k,v in pairs(cfg.propertys) do
       vRPps.getUserBypAddress(k,function(huser_id)
@@ -731,4 +745,4 @@ print("Run Table Task Update")
     end
   end)
 end
-SetTimeout(12000, task_update_tables)
+SetTimeout(5000, task_update_tables)
