@@ -550,7 +550,6 @@ local function build_entry_menu(user_id, property_name)
   menu["Enter: "..nicename..""] = {function(player,choice)
       vRPps.getUserBypAddress(property_name,function(huser_id)
         if huser_id ~= nil then
-		   --vRPps.getPropertyLock1(property_name, function(locked)
 		    if vRPps.propertyGetlock(property) ~= "yes" then --  or vRPps.isEmployee(property_name,user_id)huser_id == user_id or  
 			  vRPps.accessProperty(user_id, property_name, function(ok)
 				if not ok then
@@ -560,7 +559,6 @@ local function build_entry_menu(user_id, property_name)
 		    else 
 			  vRPclient.notify(player,{"Property is closed!"})
             end
-		  --end)
         else
           vRPclient.notify(player,{"Property is not owned yet!"})
         end
@@ -573,22 +571,18 @@ local function build_entry_menu(user_id, property_name)
         vRPps.findFreeNumber(property_name, property.max, function(number)
           if number ~= nil then
 		     vRP.request({player,"Do you want to buy this property?",15,function(player,ok)
-				if ok then
-
-					if vRP.tryPayment({user_id, property.buy_price}) then
-					  -- bought, set address
-					  vRPps.setUserpAddress(user_id, property_name, number)
-
-					  vRPclient.notify(player,{lang.property.buy.bought()})
-					else
-					  vRPclient.notify(player,{lang.money.not_enough()})
-					end
-
+			  if ok then
+				if vRP.tryPayment({user_id, property.buy_price}) then
+				  -- bought, set address
+				  vRPps.setUserpAddress(user_id, property_name, number)
+				  vRPclient.notify(player,{lang.property.buy.bought()})
 				else
-				  vRPclient.notify(player,{lang.common.request_refused()})
+				  vRPclient.notify(player,{lang.money.not_enough()})
 				end
-			  end})
-	
+			  else
+				vRPclient.notify(player,{lang.common.request_refused()})
+			  end
+			end})
           else
             vRPclient.notify(player,{lang.property.buy.full()})
           end
@@ -601,81 +595,72 @@ local function build_entry_menu(user_id, property_name)
 
   menu[lang.property.sell.title()] = {function(player,choice)
 	if player ~= nil then
-		vRPclient.getNearestPlayers(player,{15},function(nplayers)
-			vRPps.getUserpAddress(user_id, function(address)
-				if address ~= nil and address.property == property_name then
-					usrList = ""
-					for k,v in pairs(nplayers) do
-						usrList = usrList .. "[" .. vRP.getUserId({k}) .. "]" .. GetPlayerName(k) .. " | "
-					end
-					if usrList ~= "" then
-						vRP.prompt({player,"Players Nearby: " .. usrList .. "","",function(player,buyerID) 
-							buyerID = buyerID
-							if buyerID ~= nil and buyerID ~= "" then
-								local target = vRP.getUserSource({tonumber(buyerID)})
-								if target ~= nil then
-									vRP.prompt({player,"Price $: ","",function(player,amount)
-										if (tonumber(amount)) then
-											vRPps.getUserpAddress(buyerID, function(address2)
-												--if address2 == nil and address2.property ~= nil then
-												address2 = address2
-												print(address2)
-												--print(property_name)		
-												if address2 ~= nil then --and address2.property ~= property_name
-														print(address2)
-														--print(address2.property)
-														--print(property_name)
-													vRPclient.notify(player,{"~r~The player already has a house."})
-												else
-													vRP.request({target,GetPlayerName(player).." wants to sell: " ..address.property.. " Price: $"..amount, 10, function(target,ok)
-														if ok then
-															local oldUser = vRP.getUserId({player})
-															local NewUser = vRP.getUserId({target})
-															local money = vRP.getMoney({NewUser})
-															if (tonumber(money) >= tonumber(amount)) then
-																vRPps.sellPropertyToPlayer(buyerID, oldUser, address.property, address.number)
-																vRP.giveMoney({oldUser, amount})
-																vRP.setMoney({NewUser,money-amount})
-																vRPclient.notify(player,{"~g~You have successfully sold the house to ".. GetPlayerName(target).." for $"..amount.."!"})
-																vRPclient.notify(target,{"~g~"..GetPlayerName(player).." has successfully sold you the house for $"..amount.."!"})
-															else
-																vRPclient.notify(player,{"~r~".. GetPlayerName(target).." doesn't have enough money!"})
-																vRPclient.notify(target,{"~r~You don't have enough money!"})
-															end
-														else
-															vRPclient.notify(player,{"~r~"..GetPlayerName(target).." has refused to buy the house."})
-															vRPclient.notify(target,{"~r~You have refused to buy "..GetPlayerName(player).."'s house."})
-														end
-													end})
-													vRP.closeMenu({player})
-												end	
-											end)
-										else
-											vRPclient.notify(player,{"~r~The price of the house has to be a number."})
-										end
-									end})
-								else
-									vRPclient.notify(player,{"~r~That ID seems invalid."})
-								end
+	  vRPclient.getNearestPlayers(player,{15},function(nplayers)
+		vRPps.getUserpAddress(user_id, function(address)
+		  if address ~= nil and address.property == property_name then
+			usrList = ""
+			for k,v in pairs(nplayers) do
+			  usrList = usrList .. "[" .. vRP.getUserId({k}) .. "]" .. GetPlayerName(k) .. " | "
+			end
+			if usrList ~= "" then
+			  vRP.prompt({player,"Players Nearby: " .. usrList .. "","",function(player,buyerID) 
+			  buyerID = buyerID
+			  if buyerID ~= nil and buyerID ~= "" then
+				local target = vRP.getUserSource({tonumber(buyerID)})
+				if target ~= nil then
+				  vRP.prompt({player,"Price $: ","",function(player,amount)
+					if (tonumber(amount)) then
+					  vRPps.getUserpAddress(buyerID, function(address2)
+						address2 = address2
+						if address2 ~= nil then
+						  vRPclient.notify(player,{"~r~The player already has a house."})
+						else
+						  vRP.request({target,GetPlayerName(player).." wants to sell: " ..address.property.. " Price: $"..amount, 10, function(target,ok)
+							if ok then
+							  local oldUser = vRP.getUserId({player})
+							  local NewUser = vRP.getUserId({target})
+							  local money = vRP.getMoney({NewUser})
+							  if (tonumber(money) >= tonumber(amount)) then
+								vRPps.sellPropertyToPlayer(buyerID, oldUser, address.property, address.number)
+								vRP.giveMoney({oldUser, amount})
+								vRP.setMoney({NewUser,money-amount})
+								vRPclient.notify(player,{"~g~You have successfully sold the house to ".. GetPlayerName(target).." for $"..amount.."!"})
+								vRPclient.notify(target,{"~g~"..GetPlayerName(player).." has successfully sold you the house for $"..amount.."!"})
+							  else
+								vRPclient.notify(player,{"~r~".. GetPlayerName(target).." doesn't have enough money!"})
+								vRPclient.notify(target,{"~r~You don't have enough money!"})
+							  end
 							else
-								vRPclient.notify(player,{"~r~No player ID selected."})
+							  vRPclient.notify(player,{"~r~"..GetPlayerName(target).." has refused to buy the house."})
+							  vRPclient.notify(target,{"~r~You have refused to buy "..GetPlayerName(player).."'s house."})
 							end
-						end})
+						  end})
+						  vRP.closeMenu({player})
+						end	
+					  end)
 					else
-						--vRPclient.notify(player,{"~r~No player nearby."})
-						
-						-- sold, give sell price, remove address
-						vRP.giveMoney({user_id, property.sell_price})
-						vRPps.removeUserpAddress(user_id)
-						--vRPclient.notify(player,{lang.property.sell.sold()})
-						vRPclient.notify(player,{"~r~"..lang.property.sell.sold().."+$"..property.sell_price.."!"})
+					  vRPclient.notify(player,{"~r~The price of the house has to be a number."})
 					end
+				  end})
 				else
-					vRPclient.notify(player,{lang.property.sell.no_property()})
+				  vRPclient.notify(player,{"~r~That ID seems invalid."})
 				end
-			end)
-		end)
-	end
+			  else
+				vRPclient.notify(player,{"~r~No player ID selected."})
+			  end
+			end})
+		  else		
+			-- sold, give sell price, remove address
+			vRP.giveMoney({user_id, property.sell_price})
+			vRPps.removeUserpAddress(user_id)
+			vRPclient.notify(player,{"~r~"..lang.property.sell.sold().."+$"..property.sell_price.."!"})
+		  end
+		else
+		  vRPclient.notify(player,{lang.property.sell.no_property()})
+		end
+	  end)
+	end)
+  end
 end, lang.property.sell.description({property.sell_price})}
 
   return menu
