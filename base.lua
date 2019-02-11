@@ -74,20 +74,9 @@ function vRPps.SaveTables(property)
 end
  
 -- Functions retrieving the table information from the database
--- Get locked data from property @ property
-function vRPps.getPropertyLock(property)
-  if vRPps.property_locks[property] == nil then
-	vRPps.property_locks[property] = {}
-	MySQL.Async.fetchAll('SELECT locked FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
-	  vRPps.property_locks[property] = result[1].locked
-	end)
-  end
-end
 
--- Get Employees from property
-function vRPps.getEmployees(property)
+function vRPps.RetrieveTables(property)
   if vRPps.property_Employeetables[property] == nil then
-	vRPps.property_Employeetables[property] = {}
 	MySQL.Async.fetchAll('SELECT employees FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	  local etable = json.decode(result[1].employees)
 	  if type(etable) == "table" then 
@@ -95,12 +84,8 @@ function vRPps.getEmployees(property)
 	  end
 	end)
   end
-end
 
--- Get salary data from Employees @ property
-function vRPps.getSalary(property)
   if vRPps.property_Salarytables[property] == nil then
-	vRPps.property_Salarytables[property] = {}
 	MySQL.Async.fetchAll('SELECT salary FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	  local etable = json.decode(result[1].salary)
 	  if type(etable) == "table" then 
@@ -108,8 +93,13 @@ function vRPps.getSalary(property)
 	  end
 	end)
   end
-end
 
+  if vRPps.property_locks[property] == nil then
+	MySQL.Async.fetchAll('SELECT locked FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
+	  vRPps.property_locks[property] = result[1].locked
+	end)
+  end
+end
 
 -- Functions retrieving the table information to use
 function vRPps.propertyGetlockStatus(property)
@@ -126,13 +116,6 @@ function vRPps.propertyGetlockStatus(property)
   end
   return current,option,new,numberrr
 end
-
-
-
-
-
-
--- Functions "setting" the table information
 
 
 
@@ -611,7 +594,7 @@ local function build_entry_menu(user_id, property_name)
 			if usrList ~= "" then
 			  vRP.prompt({player,"Players Nearby: " .. usrList .. "","",function(player,buyerID) 
 			  buyerID = buyerID
-			  if buyerID ~= nil and buyerID ~= "" then
+			    if buyerID ~= nil and buyerID ~= "" then
 				local target = vRP.getUserSource({tonumber(buyerID)})
 				if target ~= nil then
 				  vRP.prompt({player,"Price $: ","",function(player,amount)
@@ -653,20 +636,20 @@ local function build_entry_menu(user_id, property_name)
 				end
 			  else
 				vRPclient.notify(player,{"~r~No player ID selected."})
-			  end
-			end})
-		  else		
-			vRP.giveMoney({user_id, property.sell_price})
-			vRPps.removeUserpAddress(user_id)
-			vRPclient.notify(player,{"~r~"..lang.property.sell.sold().."+$"..property.sell_price.."!"})
+					end
+			  end})
+		      else		
+			    vRP.giveMoney({user_id, property.sell_price})
+			    vRPps.removeUserpAddress(user_id)
+			    vRPclient.notify(player,{"~r~"..lang.property.sell.sold().."+$"..property.sell_price.."!"})
+		      end
+		  else
+			vRPclient.notify(player,{lang.property.sell.no_property()})
 		  end
-		else
-		  vRPclient.notify(player,{lang.property.sell.no_property()})
-		end
+	    end)
 	  end)
-	end)
-  end
-end, lang.property.sell.description({property.sell_price})}
+	end
+  end, lang.property.sell.description({property.sell_price})}
 
   return menu
 end
@@ -727,13 +710,12 @@ function task_save_datatables()
       vRPps.getUserBypAddress(k,function(var)
         if var ~= nil then
 		  vRPps.SaveTables(k)
-		  print("Saving property datatables")
 	    end
 	  end)
     end
 
   Debug.pend()
-  SetTimeout(config.save_interval*1000, task_save_datatables)
+  SetTimeout(60*1000, task_save_datatables)
 end
 
 function task_update_tables()
@@ -741,9 +723,7 @@ function task_update_tables()
     for k,v in pairs(cfg.propertys) do
       vRPps.getUserBypAddress(k,function(var)
         if var ~= nil then
-		  vRPps.getEmployees(k)
-		  vRPps.getPropertyLock(k)
-		  vRPps.getSalary(k)
+		  vRPps.RetrieveTables(k)
 	    end
 	  end)
     end
