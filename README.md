@@ -1,5 +1,7 @@
-# vRP_Business_module
-vRP_Business_module as the name suggests
+# vRP_properties
+vRP_properties as the name suggests
+
+Replaces Gunshops, Skinshops and many more core modules.
 
 
 # Progress
