@@ -19,11 +19,6 @@ Tunnel.bindInterface("vRP_properties",vRPps)
 -- load language 
 local lang = Lang.new(module("vrp", "cfg/lang/"..config.lang) or {})
 
---MySQL.createCommand("vRP/rm_paddress","DELETE FROM vrp_user_properties WHERE user_id = @user_id")
---MySQL.createCommand("vRP/set_paddress","REPLACE INTO vrp_user_properties(user_id,property,number) VALUES(@user_id,@property,@number)")
---MySQL.createCommand("vRP/sell_property","UPDATE vrp_user_properties SET user_id = @user_id, property = @property, number = @number WHERE user_id = @oldUser, property = @property, number = @number")
-
-
 --
 local components = {}
 --
@@ -151,9 +146,6 @@ end
 
 -- check if the user has a specific group
 function vRPps.isEmployee(property,user_id)
-  if vRPps.property_Employeetables[property] == nil then
-	vRPps.getEmployees(property)
-  end
     local data = vRPps.property_Employeetables[property]
 	if type(data) == "table" then 
       for k,v in pairs(data.employee) do
@@ -241,16 +233,16 @@ end
 
 -- set user address
 function vRPps.setUserpAddress(user_id,property,number)
-  MySQL.execute("vRP/set_paddress", {user_id = user_id, property = property, number = number})
+  MySQL.Async.execute('REPLACE INTO vrp_user_properties(user_id,property,number) VALUES(@user_id,@property,@number)', {['@user_id'] = user_id, ['@property'] = property, ['@number'] = number})
 end
 
 -- remove user address
 function vRPps.removeUserpAddress(user_id)
-  MySQL.execute("vRP/rm_paddress", {user_id = user_id})
+  MySQL.Async.execute('DELETE FROM vrp_user_properties WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
 end
 
 function vRPps.sellPropertyToPlayer(user_id, oldUser, property, number)
-	MySQL.execute("vRP/sell_property", {user_id = user_id, oldUser = oldUser, property = property, number = number})
+  MySQL.Async.execute('UPDATE vrp_user_properties SET user_id = @user_id, property = @property, number = @number WHERE user_id = @oldUser, property = @property, number = @number',{['@user_id'] = user_id, ['@property'] = property, ['@number'] = number, ['@oldUser'] = oldUser})
 end
 
 -- cbreturn user_id or nil
