@@ -23,53 +23,29 @@ local lang = Lang.new(module("vrp", "cfg/lang/"..config.lang) or {})
 local components = {}
 --
 
--- property_Employeetables data tables (logger storage, saved to database)
+
+-- Base functions to retrieve / save tables
 --
-
-vRPps.property_Employeetables = {}
-
-function vRPps.property_employees(property)
-  return vRPps.property_Employeetables[property]
-end
-
--- property_Salarytables data tables (logger storage, saved to database)
---
-
-vRPps.property_Salarytables = {}
-
-function vRPps.property_salary(property)
-  return vRPps.property_Salarytables[property]
-end
-
--- property_locks data tables (logger storage, saved to database)
---
-
-vRPps.property_locks = {}
-
-function vRPps.propertyGetlock(property)
-  return vRPps.property_locks[property]
-end
-
--- Base functions to save tables
-
--- Save server data from property table to db
 function vRPps.SaveTables(property)
-  if vRPps.property_Employeetables[property] == nil then
+  if vRPps.property_Employeetables[property] ~= nil then
     local employees = vRPps.property_employees(property)
 	MySQL.Async.execute('UPDATE vrp_user_properties SET employees = @employees WHERE property = @property', {['@employees'] = employees, ['@property'] = property})
   end
-  if vRPps.property_Salarytables[property] == nil then
+  if vRPps.property_Salarytables[property] ~= nil then
     local salary = vRPps.property_salary(property)
 	MySQL.Async.execute('UPDATE vrp_user_properties SET salary = @salary WHERE property = @property', {['@salary'] = salary, ['@property'] = property})
   end
-  if vRPps.property_locks[property] == nil then
+  if vRPps.property_locks[property] ~= nil then
     local locked = vRPps.propertyGetlock(property)
 	MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = locked, ['@property'] = property})
   end
+  if vRPps.property_adjustments[property] ~= nil then
+    local price_adjustment = vRPps.propertyGetadjustments(property)
+	MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price_adjustment WHERE property = @property', {['@price_adjustment'] = price_adjustment, ['@property'] = property})
+  end
 end
  
--- Functions retrieving the table information from the database
-
+--
 function vRPps.RetrieveTables(property)
   if vRPps.property_Employeetables[property] == nil then
 	MySQL.Async.fetchAll('SELECT employees FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
@@ -94,9 +70,89 @@ function vRPps.RetrieveTables(property)
 	  vRPps.property_locks[property] = result[1].locked
 	end)
   end
+
+  if vRPps.property_adjustments[property] == nil then
+	MySQL.Async.fetchAll('SELECT price_adjustment FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
+	  vRPps.property_adjustments[property] = result[1].price_adjustment
+	end)
+  end
+  
 end
 
--- Functions retrieving the table information to use
+
+
+
+-- property_Employeetables data tables (logger storage, saved to database) and their associated functions
+--
+vRPps.property_Employeetables = {}
+--
+function vRPps.property_employees(property)
+  return vRPps.property_Employeetables[property]
+end
+--
+function vRPps.setproperty_employees(property,value)
+  if value == "0" then 
+    vRPps.property_Employeetables[property] = nil
+  else
+	vRPps.property_Employeetables[property] = value
+  end
+end
+--
+function vRPps.isEmployee(property,user_id)
+    local data = vRPps.property_employees(property)
+	if type(data) == "table" then 
+      for k,v in pairs(data.employee) do
+	    if tonumber(k) == tonumber(user_id) then
+	      return true
+	    end
+      end
+	end
+  return false
+end
+--
+function vRPps.AddEmployee(user_id,property)
+  if not vRPps.IsEmployee(property,user_id) then
+    vRPps.setproperty_employees(property,"true")
+	print("Employee Added")
+  end
+end
+--
+function vRPps.RemoveEmployee(user_id,property)
+  if vRPps.IsEmployee(property,user_id) then
+	vRPps.setproperty_employees(property,"0")
+	print("Employee Removed")
+  end
+end
+
+
+
+
+
+-- property_Salarytables data tables (logger storage, saved to database) and their associated functions
+--
+vRPps.property_Salarytables = {}
+--
+function vRPps.property_salary(property)
+  return vRPps.property_Salarytables[property]
+end
+
+
+
+
+
+
+-- property_locks data tables (logger storage, saved to database) and their associated functions
+--
+vRPps.property_locks = {}
+--
+function vRPps.propertyGetlock(property)
+  return vRPps.property_locks[property]
+end
+--
+function vRPps.setPropertyLock(property,locked)
+  vRPps.property_locks[property] = locked
+end
+--
 function vRPps.propertyGetlockStatus(property)
   if vRPps.property_locks[property] == "yes" then 
 	current = "closed"
@@ -118,134 +174,75 @@ end
 
 
 
+-- price adjustments data tables (logger storage, saved to database) and their associated functions
+--
 
---------------------- business options -------------------
---------------------- business options -------------------
--- cbreturn property info (sales or earned) or nil
-function vRPps.getPriceadjustment(property, cbr) --,cbr)
-  local task = Task(cbr)
-  MySQL.Async.fetchAll('SELECT price_adjustment FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
-	task({result[1].price_adjustment})
-  end)
+vRPps.property_adjustments = {}
+--
+function vRPps.propertyGetadjustments(property)
+  return vRPps.property_adjustments[property]
 end
-
--- set property info (sales and earned)
+--
 function vRPps.setPriceadjustment(property,price)
-  MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price WHERE property = @property', {['@price'] = price, ['@property'] = property})
+  vRPps.property_adjustments[property] = locked
+  --MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price WHERE property = @property', {['@price'] = price, ['@property'] = property})
 end
 
 
 
 
--- set property info (sales and earned)
-function vRPps.setPropertyLock(property,locked)
-  vRPps.property_locks[property] = locked
-  MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = locked, ['@property'] = property})
-end
 
-
--- check if the user has a specific group
-function vRPps.isEmployee(property,user_id)
-    local data = vRPps.property_Employeetables[property]
-	if type(data) == "table" then 
-      for k,v in pairs(data.employee) do
-	    if tonumber(k) == tonumber(user_id) then
-	      return true
-	    end
-      end
-	end
-  return false
-end
-
-
--- add a employee to a property
-function vRPps.AddEmployee(user_id,property)
-  if not vRPps.IsEmployee(property,user_id) then
-    local employees = vRPps.property_employees(property)
-      -- add employee
-      employees[user_id] = true
-		print("Employee Added")
-	  --vRPps.SetBusinessEmployees(property,employees)
-  end
-end
-
--- remove a employee from x property
-function vRPps.RemoveEmployee(user_id,property)
-  if vRPps.IsEmployee(property,user_id) then
-    local employees = vRPps.property_employees(property)
-      -- add employee
-      employees[user_id] = nil
-		print("Employee Removed")
-
-	  --vRPps.SetBusinessEmployees(property,employees)
-  end
-end
-
-
----------------- business ----------------
----------------- business ----------------
-
--- cbreturn property info (sales or earned) or nil
+--
 function vRPps.getPropertySales(property, cbr)
   local task = Task(cbr)
-
   MySQL.Async.fetchAll('SELECT sales FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	task({result[1].sales})
   end)
 end
-
--- cbreturn property info (sales or earned) or nil
+--
 function vRPps.getPropertyEarned(property, cbr)
   local task = Task(cbr)
   MySQL.Async.fetchAll('SELECT earned FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	task({result[1].earned})
   end)
 end
-
+--
 function vRPps.UpdatePropertyInfo(price,amount,stype)
-  print("UpdatePropertyInfo 0 "..price.." "..amount.." "..stype)
   vRPps.getPropertyEarned(stype, function(earned)
     vRPps.getPropertySales(stype, function(sales)
-	print("UpdatePropertyInfo 1 "..earned.." "..sales.." "..stype)
-
 	  local earned = earned+price
 	  local sales = sales+amount
-	  print("UpdatePropertyInfo 2 "..earned.." "..sales.." "..stype)
-
-	  --vRPps.setPropertyInfo(sales,earned,stype)
-	    MySQL.Async.execute('UPDATE vrp_user_properties SET sales = @sales, earned = @earned WHERE property = @stype', {['@sales'] = sales, ['@earned'] = earned, ['@stype'] = stype})
-
-	print("UpdatePropertyInfo 3 "..earned.." "..sales.." "..stype.." Done")
+	  MySQL.Async.execute('UPDATE vrp_user_properties SET sales = @sales, earned = @earned WHERE property = @stype', {['@sales'] = sales, ['@earned'] = earned, ['@stype'] = stype})
     end)
   end)
 end
 
----------------- business ----------------
----------------- business ----------------
 
--- cbreturn user address (property and number) or nil
+
+
+
+
+
+--
 function vRPps.getUserpAddress(user_id, cbr)
   local task = Task(cbr)
   MySQL.Async.fetchAll('SELECT property, number FROM vrp_user_properties WHERE user_id = @user_id', {['@user_id'] = user_id}, function(result)
     task({result[1]})
   end)
 end
-
--- set user address
+--
 function vRPps.setUserpAddress(user_id,property,number)
   MySQL.Async.execute('REPLACE INTO vrp_user_properties(user_id,property,number) VALUES(@user_id,@property,@number)', {['@user_id'] = user_id, ['@property'] = property, ['@number'] = number})
 end
-
--- remove user address
+--
 function vRPps.removeUserpAddress(user_id)
   MySQL.Async.execute('DELETE FROM vrp_user_properties WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
 end
-
+--
 function vRPps.sellPropertyToPlayer(user_id, oldUser, property, number)
   MySQL.Async.execute('UPDATE vrp_user_properties SET user_id = @user_id, property = @property, number = @number WHERE user_id = @oldUser, property = @property, number = @number',{['@user_id'] = user_id, ['@property'] = property, ['@number'] = number, ['@oldUser'] = oldUser})
 end
-
--- cbreturn user_id or nil
+--
 function vRPps.getUserBypAddress(property,cbr)
   local task = Task(cbr)
 
@@ -257,30 +254,32 @@ function vRPps.getUserBypAddress(property,cbr)
     end  
   end)
 end
-
--- find a free address number to buy
--- cbreturn number or nil if no numbers availables
+--
 function vRPps.findFreeNumber(property,max,cbr)
   local task = Task(cbr)
 
   local i = 1
-  local function search()
+  --local function search()
     vRPps.getUserBypAddress(property,function(user_id)
       if user_id == nil then -- found
         task({i})
       else -- not found
-        i = i+1
-        if i <= max then -- continue search
-          search()
-        else -- global not found
+        --i = i+1
+        --if i <= max then -- continue search
+        --  search()
+        --else -- global not found
           task()
-        end
+        --end
       end
     end)
-  end
+  --end
 
-  search()
+  --search()
 end
+
+
+
+
 
 -- define property component (oncreate and ondestroy are called for each player entering/leaving a slot)
 -- name: unique component id
