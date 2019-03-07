@@ -26,24 +26,7 @@ local components = {}
 
 -- Base functions to retrieve / save tables
 --
-function vRPps.SaveTables(property)
-  if vRPps.property_Employeetables[property] ~= nil then
-    local employees = vRPps.property_employees(property)
-	MySQL.Async.execute('UPDATE vrp_user_properties SET employees = @employees WHERE property = @property', {['@employees'] = employees, ['@property'] = property})
-  end
-  if vRPps.property_Salarytables[property] ~= nil then
-    local salary = vRPps.property_salary(property)
-	MySQL.Async.execute('UPDATE vrp_user_properties SET salary = @salary WHERE property = @property', {['@salary'] = salary, ['@property'] = property})
-  end
-  if vRPps.property_locks[property] ~= nil then
-    local locked = vRPps.propertyGetlock(property)
-	MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = locked, ['@property'] = property})
-  end
-  if vRPps.property_adjustments[property] ~= nil then
-    local price_adjustment = vRPps.propertyGetadjustments(property)
-	MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price_adjustment WHERE property = @property', {['@price_adjustment'] = price_adjustment, ['@property'] = property})
-  end
-end
+
  
 --
 function vRPps.RetrieveTables(property)
@@ -80,6 +63,22 @@ function vRPps.RetrieveTables(property)
 end
 
 
+function vRPps.SaveTables(property)
+  local ltabletmp = vRPps.property_locks[property]
+  if ltabletmp ~= nil then
+	MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = ltabletmp, ['@property'] = property})
+	print("Updated locked on"..property.." with: "..ltabletmp)
+  end
+
+  local etabletmp = vRPps.property_Employeetables[property]
+  if etabletmp ~= nil and type(etabletmp) == "table" then
+    local etable = json.encode(etabletmp)
+	MySQL.Async.execute('UPDATE vrp_user_properties SET employees = @employees WHERE property = @property', {['@employees'] = etable, ['@property'] = property})
+	print("Updated employees on "..property)
+  end
+
+
+end
 
 
 -- property_Employeetables data tables (logger storage, saved to database) and their associated functions
@@ -89,37 +88,53 @@ vRPps.property_Employeetables = {}
 function vRPps.property_employees(property)
   return vRPps.property_Employeetables[property]
 end
+function vRPps.property_aemployees(property)
+  return vRPps.property_Employeetables[property].employees
+end
 --
-function vRPps.setproperty_employees(property,value)
+function vRPps.setproperty_employees(property,user_id,value,salary)
   if value == "0" then 
-    vRPps.property_Employeetables[property] = nil
+    print("removed?")
+	local testemployees = vRPps.property_aemployees(property)
+	testemployees["user_id"] = nil
+    vRPps.property_Employeetables[property].employees[user_id] = nil
+    vRPps.property_Employeetables[property].salary[user_id] = nil
+	print(vRPps.property_Employeetables[property].employees[user_id])
+	print(vRPps.property_Employeetables[property].salary[user_id])
   else
-	vRPps.property_Employeetables[property] = value
+
+	vRPps.property_Employeetables[property].employees[user_id] = true
+    vRPps.property_Employeetables[property].salary[user_id] = salary
+	print(vRPps.property_Employeetables[property].employees[user_id])
+	print(vRPps.property_Employeetables[property].salary[user_id])
+
   end
 end
 --
 function vRPps.isEmployee(property,user_id)
     local data = vRPps.property_employees(property)
 	if type(data) == "table" then 
-      for k,v in pairs(data.employee) do
-	    if tonumber(k) == tonumber(user_id) then
-	      return true
-	    end
-      end
+	local sdata = data.employees
+		for k,v in pairs(sdata) do
+		print(k)
+		  if tonumber(k) == tonumber(user_id) then
+			do return true end
+		  end
+		end
 	end
-  return false
+  do return false end
 end
 --
-function vRPps.AddEmployee(user_id,property)
-  if not vRPps.IsEmployee(property,user_id) then
-    vRPps.setproperty_employees(property,"true")
+function vRPps.AddEmployee(user_id,property,salary)
+  --if not vRPps.isEmployee(property,user_id) then
+    vRPps.setproperty_employees(property,user_id,"true",salary)
 	print("Employee Added")
-  end
+  --end
 end
 --
 function vRPps.RemoveEmployee(user_id,property)
-  if vRPps.IsEmployee(property,user_id) then
-	vRPps.setproperty_employees(property,"0")
+  if vRPps.isEmployee(property,user_id) then
+	vRPps.setproperty_employees(property,user_id,"0","0")
 	print("Employee Removed")
   end
 end
@@ -531,10 +546,16 @@ local function build_entry_menu(user_id, property_name)
   menu["Enter: "..property.nice_name..""] = {function(player,choice)
       vRPps.getUserBypAddress(property_name,function(huser_id)
         if huser_id ~= nil then
-		    if huser_id == user_id or vRPps.propertyGetlock(property) ~= "yes" or vRPps.isEmployee(property_name,user_id) then 
+		  local ISemployee = vRPps.isEmployee(property_name,user_id)
+			if huser_id == user_id or vRPps.propertyGetlock(property_name) ~= "yes" or ISemployee then 
+
 			  vRPps.accessProperty(user_id, property_name, function(ok)
 				if not ok then
 				  vRPclient.notify(player,{lang.property.intercom.not_available()})
+				  do return end
+				end
+				if ISemployee then
+				  vRPclient.notify(player,{"Welcome Employee!"})
 				end
 			  end)
 		    else 
@@ -706,23 +727,21 @@ function task_save_datatables()
     end
 
   Debug.pend()
-  SetTimeout(60*1000, task_save_datatables)
+  SetTimeout(30*1000, task_save_datatables)
 end
 
-function task_update_tables()
-  MySQL.ready(function ()
-    for k,v in pairs(cfg.propertys) do
-      vRPps.getUserBypAddress(k,function(var)
-        if var ~= nil then
-		  vRPps.RetrieveTables(k)
-	    end
-	  end)
-    end
-  end)
-  SetTimeout(config.save_interval*1000, task_save_datatables)
+function task_sql()
+  for k,v in pairs(cfg.propertys) do
+	vRPps.getUserBypAddress(k,function(var)
+      if var ~= nil then
+		vRPps.RetrieveTables(k)
+	  end
+	end)
+  end
+  SetTimeout(30*1000, task_save_datatables)
 end
-SetTimeout(5000, task_update_tables)
-
-
+MySQL.ready(function ()
+  SetTimeout(5000, task_sql)
+end)
 
 
