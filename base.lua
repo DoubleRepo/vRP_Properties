@@ -23,11 +23,8 @@ local lang = Lang.new(module("vrp", "cfg/lang/"..config.lang) or {})
 local components = {}
 --
 
-
 -- Base functions to retrieve / save tables
 --
-
- 
 --
 function vRPps.RetrieveTables(property)
   if vRPps.property_Employeetables[property] == nil then
@@ -38,48 +35,28 @@ function vRPps.RetrieveTables(property)
 	  end
 	end)
   end
-
-  if vRPps.property_Salarytables[property] == nil then
-	MySQL.Async.fetchAll('SELECT salary FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
-	  local etable = json.decode(result[1].salary)
-	  if type(etable) == "table" then 
-	    vRPps.property_Salarytables[property] = etable
-	  end
-	end)
-  end
-
   if vRPps.property_locks[property] == nil then
 	MySQL.Async.fetchAll('SELECT locked FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	  vRPps.property_locks[property] = result[1].locked
 	end)
   end
-
   if vRPps.property_adjustments[property] == nil then
 	MySQL.Async.fetchAll('SELECT price_adjustment FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
 	  vRPps.property_adjustments[property] = result[1].price_adjustment
 	end)
-  end
-  
+  end 
 end
-
-
 function vRPps.SaveTables(property)
   local ltabletmp = vRPps.property_locks[property]
   if ltabletmp ~= nil then
 	MySQL.Async.execute('UPDATE vrp_user_properties SET locked = @locked WHERE property = @property', {['@locked'] = ltabletmp, ['@property'] = property})
-	print("Updated locked on"..property.." with: "..ltabletmp)
   end
-
   local etabletmp = vRPps.property_Employeetables[property]
   if etabletmp ~= nil and type(etabletmp) == "table" then
     local etable = json.encode(etabletmp)
 	MySQL.Async.execute('UPDATE vrp_user_properties SET employees = @employees WHERE property = @property', {['@employees'] = etable, ['@property'] = property})
-	print("Updated employees on "..property)
   end
-
-
 end
-
 
 -- property_Employeetables data tables (logger storage, saved to database) and their associated functions
 --
@@ -88,26 +65,16 @@ vRPps.property_Employeetables = {}
 function vRPps.property_employees(property)
   return vRPps.property_Employeetables[property]
 end
-function vRPps.property_aemployees(property)
-  return vRPps.property_Employeetables[property].employees
-end
 --
 function vRPps.setproperty_employees(property,user_id,value,salary)
   if value == "0" then 
-    print("removed?")
-	local testemployees = vRPps.property_aemployees(property)
-	testemployees["user_id"] = nil
     vRPps.property_Employeetables[property].employees[user_id] = nil
     vRPps.property_Employeetables[property].salary[user_id] = nil
-	print(vRPps.property_Employeetables[property].employees[user_id])
-	print(vRPps.property_Employeetables[property].salary[user_id])
+  elseif value == "1" then 
+    vRPps.property_Employeetables[property].salary[user_id] = salary
   else
-
 	vRPps.property_Employeetables[property].employees[user_id] = true
     vRPps.property_Employeetables[property].salary[user_id] = salary
-	print(vRPps.property_Employeetables[property].employees[user_id])
-	print(vRPps.property_Employeetables[property].salary[user_id])
-
   end
 end
 --
@@ -116,7 +83,6 @@ function vRPps.isEmployee(property,user_id)
 	if type(data) == "table" then 
 	local sdata = data.employees
 		for k,v in pairs(sdata) do
-		print(k)
 		  if tonumber(k) == tonumber(user_id) then
 			do return true end
 		  end
@@ -126,10 +92,10 @@ function vRPps.isEmployee(property,user_id)
 end
 --
 function vRPps.AddEmployee(user_id,property,salary)
-  --if not vRPps.isEmployee(property,user_id) then
+  if not vRPps.isEmployee(property,user_id) then
     vRPps.setproperty_employees(property,user_id,"true",salary)
 	print("Employee Added")
-  --end
+  end
 end
 --
 function vRPps.RemoveEmployee(user_id,property)
@@ -139,21 +105,12 @@ function vRPps.RemoveEmployee(user_id,property)
   end
 end
 
-
-
-
-
--- property_Salarytables data tables (logger storage, saved to database) and their associated functions
---
-vRPps.property_Salarytables = {}
---
-function vRPps.property_salary(property)
-  return vRPps.property_Salarytables[property]
+function vRPps.ChangeEmployee(user_id,property,salary)
+  if vRPps.isEmployee(property,user_id) then
+	vRPps.setproperty_employees(property,user_id,"1",salary)
+	print("Employee changed")
+  end
 end
-
-
-
-
 
 
 -- property_locks data tables (logger storage, saved to database) and their associated functions
@@ -184,11 +141,6 @@ function vRPps.propertyGetlockStatus(property)
 end
 
 
-
-
-
-
-
 -- price adjustments data tables (logger storage, saved to database) and their associated functions
 --
 
@@ -200,7 +152,6 @@ end
 --
 function vRPps.setPriceadjustment(property,price)
   vRPps.property_adjustments[property] = locked
-  --MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price WHERE property = @property', {['@price'] = price, ['@property'] = property})
 end
 
 
@@ -548,10 +499,13 @@ local function build_entry_menu(user_id, property_name)
         if huser_id ~= nil then
 		  local ISemployee = vRPps.isEmployee(property_name,user_id)
 			if huser_id == user_id or vRPps.propertyGetlock(property_name) ~= "yes" or ISemployee then 
-
 			  vRPps.accessProperty(user_id, property_name, function(ok)
 				if not ok then
 				  vRPclient.notify(player,{lang.property.intercom.not_available()})
+				  do return end
+				end
+				if huser_id == user_id then
+				  vRPclient.notify(player,{"Welcome Boss!"})
 				  do return end
 				end
 				if ISemployee then
@@ -727,7 +681,7 @@ function task_save_datatables()
     end
 
   Debug.pend()
-  SetTimeout(30*1000, task_save_datatables)
+  SetTimeout(60*1000, task_save_datatables)
 end
 
 function task_sql()
