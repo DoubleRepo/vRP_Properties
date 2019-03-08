@@ -87,36 +87,33 @@ function vRPps.setproperty_employees(property,user_id,value,salary)
 end
 --
 function vRPps.isEmployee(property,user_id)
-    local data = vRPps.property_employees(property)
-	if type(data) == "table" then 
-	local sdata = data.employees
-		for k,v in pairs(sdata) do
-		  if tonumber(k) == tonumber(user_id) then
-			do return true end
-		  end
-		end
+  local data = vRPps.property_employees(property)
+  if type(data) == "table" then 
+  local sdata = data.employees
+	for k,v in pairs(sdata) do
+	  if tonumber(k) == tonumber(user_id) then
+		do return true end
+	  end
 	end
+  end
   do return false end
 end
 --
 function vRPps.AddEmployee(user_id,property,salary)
   if not vRPps.isEmployee(property,user_id) then
     vRPps.setproperty_employees(property,user_id,"true",salary)
-	print("Employee Added")
   end
 end
 --
 function vRPps.RemoveEmployee(user_id,property)
   if vRPps.isEmployee(property,user_id) then
 	vRPps.setproperty_employees(property,user_id,"0","0")
-	print("Employee Removed")
   end
 end
 
 function vRPps.ChangeEmployee(user_id,property,salary)
   if vRPps.isEmployee(property,user_id) then
 	vRPps.setproperty_employees(property,user_id,"1",salary)
-	print("Employee changed")
   end
 end
 
@@ -145,7 +142,7 @@ function vRPps.propertyGetlockStatus(property)
 	new = "yes"
 	numberrr = 1
   end
-  return current,option,new,numberrr
+  do return current,option,new,numberrr end
 end
 
 
@@ -162,10 +159,54 @@ function vRPps.setPriceadjustment(property,prices)
   vRPps.property_adjustments[property] = prices
 end
 
-
-
-
-
+function vRPps.GetPriceAdjustments(property,switch)
+print(switch)
+print("printing tostring switch"..tostring(switch))
+  local atable = vRPps.propertyGetadjustments(property)
+  if type(atable) == "table" then
+    if switch == "food" then 
+	  local foods = atable.foods
+	  do return foods end
+	end
+    if switch == "drinks" then 
+	  local drinks = atable.drinks
+	  do return drinks end
+	end
+    if switch == "guns" then 
+	  local guns = atable.guns
+	  do return guns end
+	end
+    if switch == "liquor" then 
+	  local liquor = atable.liquor
+	  do return liquor end
+	end
+    if switch == "market" then 
+	  local market = atable.market
+	  do return market end
+	end
+    if switch == "drugs" then 
+	  local drugs = atable.drugs
+	  do return drugs end
+	end
+    if switch == "clothing" then 
+	  local clothing = atable.clothing
+	  do return clothing end
+	end
+    if switch == "gas" then 
+	  local gas = atable.gas
+	  do return gas end
+	end
+    if switch == "misc" then 
+	  local misc = atable.misc
+	  do return misc end
+	end
+    if switch == "gambling" then 
+	  local gambling = atable.gambling
+	  do return gambling end
+	end
+  end
+  do return "0" end
+end
 --
 function vRPps.getPropertySales(property, cbr)
   local task = Task(cbr)
