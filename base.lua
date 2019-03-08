@@ -42,7 +42,10 @@ function vRPps.RetrieveTables(property)
   end
   if vRPps.property_adjustments[property] == nil then
 	MySQL.Async.fetchAll('SELECT price_adjustment FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
-	  vRPps.property_adjustments[property] = result[1].price_adjustment
+	  local atable = json.decode(result[1].price_adjustment)
+	  if type(atable) == "table" then 
+	    vRPps.property_adjustments[property] = atable
+	  end
 	end)
   end 
 end
@@ -56,6 +59,11 @@ function vRPps.SaveTables(property)
     local etable = json.encode(etabletmp)
 	MySQL.Async.execute('UPDATE vrp_user_properties SET employees = @employees WHERE property = @property', {['@employees'] = etable, ['@property'] = property})
   end
+  local atabletmp = vRPps.property_adjustments[property]
+  if atabletmp ~= nil and type(atabletmp) == "table" then
+    local atable = json.encode(atabletmp)
+	MySQL.Async.execute('UPDATE vrp_user_properties SET price_adjustment = @price_adjustment WHERE property = @property', {['@price_adjustment'] = atable, ['@property'] = property})
+  end  
 end
 
 -- property_Employeetables data tables (logger storage, saved to database) and their associated functions
@@ -150,8 +158,8 @@ function vRPps.propertyGetadjustments(property)
   return vRPps.property_adjustments[property]
 end
 --
-function vRPps.setPriceadjustment(property,price)
-  vRPps.property_adjustments[property] = locked
+function vRPps.setPriceadjustment(property,prices)
+  vRPps.property_adjustments[property] = prices
 end
 
 
