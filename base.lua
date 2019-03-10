@@ -5,6 +5,7 @@ local htmlEntities = module("vrp", "lib/htmlEntities")
 
 Debug = module("vrp", "lib/Debug")
 
+local sanitizes = module("vrp", "cfg/sanitizes")
 local config = module("vrp", "cfg/base")
 local cfg = module("vRP_properties", "cfg/properties")
 
@@ -250,7 +251,7 @@ function vRPps.setUserpAddress(user_id,property,number)
   MySQL.Async.execute('REPLACE INTO vrp_user_properties(user_id,property,number) VALUES(@user_id,@property,@number)', {['@user_id'] = user_id, ['@property'] = property, ['@number'] = number})
 end
 --
-function vRPps.removeUserpAddress(user_id)
+function vRPps.removeUserpAddress(user_id,property)
   MySQL.Async.execute('DELETE FROM vrp_user_properties WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
 end
 --
@@ -291,9 +292,33 @@ function vRPps.findFreeNumber(property,max,cbr)
 
   --search()
 end
+-- cbreturn user business data or nil
+function vRPps.getUserBusiness(user_id, property, cbr)
+  local task = Task(cbr)
 
+  if user_id ~= nil then
+	MySQL.Async.execute('SELECT name,property,description,capital,laundered,reset_timestamp FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
 
+	local business = rows[1]
 
+      -- when a business is fetched from the database, check for update of the laundered capital transfer capacity
+      if business and os.time() >= business.reset_timestamp+cfg.transfer_reset_interval*60 then
+		MySQL.Async.execute('UPDATE vrp_user_business SET laundered = 0, reset_timestamp = @time WHERE user_id = @user_id and property = @property', {['@time'] = os.time() ,['@user_id'] = user_id, ['@property'] = property})
+
+        business.laundered = 0
+      end
+
+      task({business})
+  else
+    task()
+  end
+end
+--
+
+-- close the business of an user
+function vRPps.closeBusiness(user_id,property)
+  MySQL.Async.execute('DELETE FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
+end
 
 
 -- define property component (oncreate and ondestroy are called for each player entering/leaving a slot)
@@ -575,11 +600,21 @@ local function build_entry_menu(user_id, property_name)
       if address == nil then -- check if not already have a property
         vRPps.findFreeNumber(property_name, property.max, function(number)
           if number ~= nil then
-		     vRP.request({player,"Do you want to buy this property?",15,function(player,ok)
+		     vRP.request({player,"Do you want to buy this property and create a business?",15,function(player,ok)
 			  if ok then
 				if vRP.tryPayment({user_id, property.buy_price}) then
 				  vRPps.setUserpAddress(user_id, property_name, number)
 				  vRPclient.notify(player,{lang.property.buy.bought()})
+				  vRP.prompt({player,lang.business.open.prompt_name({30}),"",function(player,name)
+					if string.len(name) >= 2 and string.len(name) <= 30 then
+					  name = sanitizeString(name, sanitizes.business_name[1], sanitizes.business_name[2])
+					  MySQL.Async.execute('INSERT IGNORE INTO vrp_user_business(user_id,name,property,description,capital,laundered,reset_timestamp) VALUES(@user_id,@name,@property,"",@capital,0,@time)', {['@user_id'] = user_id, ['@name'] = name, ['@property'] = property_name, ['@capital'] = property.buy_price, ['@time'] = os.time()})
+					  vRPclient.notify(player,{lang.business.open.created()})
+					  vRP.closeMenu({player}) -- close the menu to force update business info
+					else
+					  vRPclient.notify(player,{lang.common.invalid_name()})
+					end
+				  end})
 				else
 				  vRPclient.notify(player,{lang.money.not_enough()})
 				end
@@ -598,7 +633,9 @@ local function build_entry_menu(user_id, property_name)
   end, lang.property.buy.description({property.buy_price})}
 
   menu[lang.property.sell.title()] = {function(player,choice)
-	if player ~= nil then
+  if player ~= nil then
+   vRP.request({player,GetPlayerName(player).." Do you really want to close the business and sell the property " ..address.property.."?", 15, function(player,ok)
+     if ok then
 	  vRPclient.getNearestPlayers(player,{15},function(nplayers)
 		vRPps.getUserpAddress(user_id, function(address)
 		  if address ~= nil and address.property == property_name then
@@ -655,7 +692,8 @@ local function build_entry_menu(user_id, property_name)
 			  end})
 		      else		
 			    vRP.giveMoney({user_id, property.sell_price})
-			    vRPps.removeUserpAddress(user_id)
+			    vRPps.removeUserpAddress(user_id,address.property)
+				vRPps.closeBusiness(user_id,address.property)
 			    vRPclient.notify(player,{"~r~"..lang.property.sell.sold().."+$"..property.sell_price.."!"})
 		      end
 		  else
@@ -663,7 +701,9 @@ local function build_entry_menu(user_id, property_name)
 		  end
 	    end)
 	  end)
-	end
+	 end
+   end})
+  end
   end, lang.property.sell.description({property.sell_price})}
 
   return menu
@@ -746,5 +786,3 @@ end
 MySQL.ready(function ()
   SetTimeout(5000, task_sql)
 end)
-
-
