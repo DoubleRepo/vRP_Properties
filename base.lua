@@ -297,7 +297,7 @@ function vRPps.getUserBusiness(user_id, property, cbr)
   local task = Task(cbr)
 
   if user_id ~= nil then
-	MySQL.Async.execute('SELECT name,property,description,capital,laundered,reset_timestamp FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
+    MySQL.Async.fetchAll('SELECT name,property,description,capital,laundered,reset_timestamp FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property}, function(rows)
 
 	local business = rows[1]
 
@@ -309,6 +309,7 @@ function vRPps.getUserBusiness(user_id, property, cbr)
       end
 
       task({business})
+	end)
   else
     task()
   end
@@ -786,3 +787,5 @@ end
 MySQL.ready(function ()
   SetTimeout(5000, task_sql)
 end)
+
+
