@@ -72,7 +72,18 @@ end
 vRPps.property_Employeetables = {}
 --
 function vRPps.property_employees(property)
-  return vRPps.property_Employeetables[property]
+  if vRPps.property_Employeetables[property] ~= nil then
+	return vRPps.property_Employeetables[property]
+  else
+	-- fill with data
+	MySQL.Async.fetchAll('SELECT employees FROM vrp_user_properties WHERE property = @property', {['@property'] = property}, function(result)
+	  local etable = json.decode(result[1].employees)
+	  if type(etable) == "table" then 
+	    vRPps.property_Employeetables[property] = etable
+		return vRPps.property_Employeetables[property]
+	  end
+	end)
+  end
 end
 --
 function vRPps.setproperty_employees(property,user_id,value,salary)
@@ -85,6 +96,32 @@ function vRPps.setproperty_employees(property,user_id,value,salary)
 	vRPps.property_Employeetables[property].employees[user_id] = true
     vRPps.property_Employeetables[property].salary[user_id] = salary
   end
+end
+--
+function vRPps.getproperty_employees(property,user_id,switch)
+  if switch == "2" then 
+    local employees = vRPps.property_Employeetables[property].employees
+	local salary = vRPps.property_Employeetables[property].salary[user_id]
+    return employees, salary 
+  elseif switch == "1" then 
+    return vRPps.property_Employeetables[property].salary[user_id]
+  else
+	return vRPps.property_Employeetables[property].employees
+  end
+end
+--
+
+function vRPps.SalaryRun()
+    local employees, salary = vRPps.getproperty_employees(property,user_id,"2")
+    if type(employees) == "table" then 
+	  for k,v in pairs(employees) do
+	    
+	    if tonumber(k) == tonumber(user_id) then
+		  do return true end
+	    end
+		
+	  end
+    end
 end
 --
 function vRPps.isEmployee(property,user_id)
@@ -134,12 +171,12 @@ end
 function vRPps.propertyGetlockStatus(property)
   if vRPps.property_locks[property] == "yes" then 
 	current = "closed"
-	option = "open"
+	option = "opened"
 	new = "no"
 	numberrr = 0
   else 
 	current = "opened"
-	option = "close"
+	option = "closed"
 	new = "yes"
 	numberrr = 1
   end
@@ -293,12 +330,10 @@ function vRPps.findFreeNumber(property,max,cbr)
   --search()
 end
 -- cbreturn user business data or nil
-function vRPps.getUserBusiness(user_id, property, cbr)
+function vRPps.getUserBusiness(user_id, property, cbr) --, cbr
   local task = Task(cbr)
-
   if user_id ~= nil then
-    MySQL.Async.fetchAll('SELECT name,property,description,capital,laundered,reset_timestamp FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property}, function(rows)
-
+    MySQL.Async.fetchAll('SELECT * FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property}, function(rows)
 	local business = rows[1]
 
       -- when a business is fetched from the database, check for update of the laundered capital transfer capacity
@@ -309,8 +344,10 @@ function vRPps.getUserBusiness(user_id, property, cbr)
       end
 
       task({business})
+	  --do return business end
 	end)
   else
+    --do return nil end
     task()
   end
 end
@@ -338,9 +375,7 @@ function vRPps.defPropertyComponent(name, oncreate, ondestroy)
   components[name] = {oncreate,ondestroy}
 end
 
-
 -- SLOTS
-
 -- used (or not) slots
 local uslots = {}
 for k,v in pairs(cfg.slot_ptypes) do
@@ -398,14 +433,76 @@ local function getpAddressSlot(property_name)
   return nil,nil
 end
 
--- builds
+function vRPps.is_in_slot(user_id,property)
+  local stype,sid = getpAddressSlot(property) -- get current address slot
+  if stype ~= nil and sid ~= nil then 
+	  local slot = uslots[stype][sid]
+	  if slot.players[user_id] ~= nil then
+		return true
+	  else
+		return false
+	  end
+  end
+  return false
+end
 
+-- builds
 local function is_empty(table)
   for k,v in pairs(table) do
     return false
   end
 
   return true
+end
+
+function vRPps.QuickAccess(user_id, property_name)
+  local player = vRP.getUserSource({user_id})
+  vRPps.getUserBypAddress(property_name,function(huser_id)
+	if huser_id ~= nil then
+	  local ISemployee = vRPps.isEmployee(property_name,user_id)
+	  if huser_id == user_id or vRPps.propertyGetlock(property_name) ~= "yes" or ISemployee then 
+		vRPps.accessProperty(user_id, property_name, function(ok)
+		  if not ok then
+			vRPclient.notify(player,{lang.property.intercom.not_available()})
+			do return end
+		  end
+		  if huser_id == user_id then
+			vRPclient.notify(player,{"Welcome Boss!"})
+			do return end
+		  end
+		  if ISemployee then
+			vRPclient.notify(player,{"Welcome Employee!"})
+		  end
+		end)
+	  else 
+		vRPclient.notify(player,{"Property is closed!"})
+      end
+    else
+      vRPclient.notify(player,{"Property is not owned yet!"})
+    end
+  end)
+end
+
+local function areas_out(player,stype,sid,x,y,z,entry_enter_invisible,entry_leave_invisible,switch)
+  if switch == "0" then
+	local nid = "vRP:property:slot"..stype..sid
+	--vRPclient.removeNamedMarker(player,{nid})
+	vRP.removeArea({player,nid})
+  else
+	--vRPclient.setNamedMarker(player,{"vRP:property:entry"..stype,x,y,z-1,1.8,1.8,0.5,0,255,255,255,50})
+	vRP.setArea({player,"vRP:property:entry"..stype,x,y,z,1.2,1.2,entry_enter_invisible,entry_leave_invisible})
+  end
+end
+
+local function areas(player,stype,sid,x,y,z,entry_enter,entry_leave,switch)
+  if switch == "0" then
+	--vRPclient.removeNamedMarker(player,{"vRP:property:entry"..stype})
+	vRP.removeArea({player,"vRP:property:entry"..stype})
+  else
+	local nid = "vRP:property:slot"..stype..sid
+	--vRPclient.setNamedMarker(player,{nid,x,y,z-1,1.3,1.3,0.5,0,255,125,125,50})
+	vRP.setArea({player,nid,x,y,z,1.2,1.2,entry_enter,entry_leave})
+  end
 end
 
 -- leave slot
@@ -422,7 +519,7 @@ local function leave_slot(user_id,player,stype,sid) -- called when a player leav
   end
 
   -- teleport to property entry point (outside)
-  vRPclient.teleport(player, property.entry_point) -- already an array of params (x,y,z)
+  --vRPclient.teleport(player, property.entry_point) -- already an array of params (x,y,z)
 
   -- uncount player
   slot.players[user_id] = nil
@@ -432,10 +529,21 @@ local function leave_slot(user_id,player,stype,sid) -- called when a player leav
     local name,x,y,z = table.unpack(v)
 
     if name == "entry" then
-      -- remove marker/area
-      local nid = "vRP:property:slot"..stype..sid
-      vRPclient.removeNamedMarker(player,{nid})
-      vRP.removeArea({player,nid})
+	  areas_out(player,stype,sid,x,y,z,entry_enter_invisible,entry_leave_invisible,"0")
+      local function entry_enter_invisible(player,area)
+        local user_id = vRP.getUserId({player})
+        if user_id ~= nil and not vRPps.is_in_slot(user_id,stype) then
+		  vRPps.QuickAccess(user_id, stype)
+        end
+      end
+
+      local function entry_leave_invisible(player,area)
+      end
+
+	  SetTimeout(1500, function()
+	    areas_out(player,stype,sid,x,y,z,entry_enter_invisible,entry_leave_invisible,"1")
+	  end)
+
     else
       local component = components[v[1]]
       if component then
@@ -473,63 +581,41 @@ local function enter_slot(user_id,player,stype,sid) -- called when a player ente
   -- count
   slot.players[user_id] = player
 
-  -- build the slot entry menu
-  local menu = {name=slot.property_name,css={top="75px",header_color="rgba(0,255,125,0.75)"}}
-  menu[lang.property.slot.leave.title()] = {function(player,choice) -- add leave choice
-    leave_slot(user_id,player,stype,sid)
-  end}
+  -- build the slot entry area
+  local function entry_enter(player,area)
+	if vRPps.is_in_slot(user_id,stype) then
+	  vRPclient.notify(player,{"Bye Bye, come again please!"})
 
-  vRPps.getUserpAddress(user_id, function(address)
-    -- check if owner
-    if address ~= nil and address.property == slot.property_name and tostring(address.number) == slot.property_number then
-      menu[lang.property.slot.ejectall.title()] = {function(player,choice) -- add eject all choice
-        -- copy players before calling leave for each (iteration while removing)
-        local copy = {}
-        for k,v in pairs(slot.players) do
-          copy[k] = v
-        end
+	  leave_slot(user_id,player,stype,sid)
+	end
+  end
 
-        for k,v in pairs(copy) do
-          leave_slot(k,v,stype,sid)
-        end
-      end,lang.property.slot.ejectall.description()}
-    end
-
-    -- build the slot entry menu marker/area
-
-    local function entry_enter(player,area)
-      vRP.openMenu({player,menu})
-    end
-
-    local function entry_leave(player,area)
-      vRP.closeMenu({player})
-    end
-
+  local function entry_leave(player,area)
+  end
+ 
     -- build components and special entry component
-    for k,v in pairs(cfg.slot_ptypes[stype][sid]) do
-      local name,x,y,z = table.unpack(v)
+  for k,v in pairs(cfg.slot_ptypes[stype][sid]) do
+	local name,x,y,z = table.unpack(v)
+    if name == "entry" then
+	  areas(player,stype,sid,x,y,z,entry_enter,entry_leave,"0")
+	  
+	  SetTimeout(1500, function()
+		areas(player,stype,sid,x,y,z,entry_enter,entry_leave,"1")
+	  end)
 
-      if name == "entry" then
-        -- teleport to the slot entry point
-        vRPclient.teleport(player, {x,y,z}) -- already an array of params (x,y,z)
-
-        local nid = "vRP:property:slot"..stype..sid
-        vRPclient.setNamedMarker(player,{nid,x,y,z-1,0.7,0.7,0.5,0,255,125,125,150})
-        vRP.setArea({player,nid,x,y,z,1,1.5,entry_enter,entry_leave})
-      else -- load regular component
-        local component = components[v[1]]
-        if component then
-        local data = slot.components[k]
-        if not data then
-          data = {}
-          slot.components[k] = data
-        end
-          -- oncreate(owner_id, slot_type, slot_id, cid, config, data, x, y, z, player)
-          component[1](slot.owner_id, stype, sid, k, v._config or {}, data, x, y, z, player)
-        end
+    else -- load regular component
+      local component = components[v[1]]
+      if component then
+      local data = slot.components[k]
+      if not data then
+        data = {}
+        slot.components[k] = data
       end
-    end
-  end)
+		-- oncreate(owner_id, slot_type, slot_id, cid, config, data, x, y, z, player)
+		component[1](slot.owner_id, stype, sid, k, v._config or {}, data, x, y, z, player)
+	  end
+	end
+  end
 end
 
 -- access a property by address
@@ -568,33 +654,6 @@ end
 local function build_entry_menu(user_id, property_name)
   local property = cfg.propertys[property_name]
   local menu = {name=property_name,css={top="75px",header_color="rgba(0,255,125,0.75)"}}
-
-  menu["Enter: "..property.nice_name..""] = {function(player,choice)
-      vRPps.getUserBypAddress(property_name,function(huser_id)
-        if huser_id ~= nil then
-		  local ISemployee = vRPps.isEmployee(property_name,user_id)
-			if huser_id == user_id or vRPps.propertyGetlock(property_name) ~= "yes" or ISemployee then 
-			  vRPps.accessProperty(user_id, property_name, function(ok)
-				if not ok then
-				  vRPclient.notify(player,{lang.property.intercom.not_available()})
-				  do return end
-				end
-				if huser_id == user_id then
-				  vRPclient.notify(player,{"Welcome Boss!"})
-				  do return end
-				end
-				if ISemployee then
-				  vRPclient.notify(player,{"Welcome Employee!"})
-				end
-			  end)
-		    else 
-			  vRPclient.notify(player,{"Property is closed!"})
-            end
-        else
-          vRPclient.notify(player,{"Property is not owned yet!"})
-        end
-      end)
-  end,lang.property.intercom.description()}
 
   menu[lang.property.buy.title()] = {function(player,choice)
     vRPps.getUserpAddress(user_id, function(address)
@@ -635,7 +694,7 @@ local function build_entry_menu(user_id, property_name)
 
   menu[lang.property.sell.title()] = {function(player,choice)
   if player ~= nil then
-   vRP.request({player,GetPlayerName(player).." Do you really want to close the business and sell the property " ..address.property.."?", 15, function(player,ok)
+   vRP.request({player,GetPlayerName(player).." Do you really want to close the business and sell the property ??", 15, function(player,ok)
      if ok then
 	  vRPclient.getNearestPlayers(player,{15},function(nplayers)
 		vRPps.getUserpAddress(user_id, function(address)
@@ -711,12 +770,28 @@ local function build_entry_menu(user_id, property_name)
 end
 
 
+
 -- build propertys entry points
 local function build_client_propertys(source)
+  local player = source
   local user_id = vRP.getUserId({source})
   if user_id ~= nil then
     for k,v in pairs(cfg.propertys) do
-      local x,y,z = table.unpack(v.entry_point)
+      local x,y,z = table.unpack(v.menu)
+      local ix,iy,iz = table.unpack(v.entry_point)
+	  
+      local function entry_enter_invisible(player,area)
+        local user_id = vRP.getUserId({player})
+        if user_id ~= nil and not vRPps.is_in_slot(user_id,k) then
+		  vRPps.QuickAccess(user_id, k)
+        end
+      end
+      local function entry_leave_invisible(player,area)
+      end
+	  local m = tostring(k)
+	  local nid = "vRP:property:entry"..m
+	  --vRPclient.setNamedMarker(source,{nid,ix,iy,iz-1,1.3,1.3,0.5,0,255,255,255,50})
+      vRP.setArea({source,nid,ix,iy,iz,1.3,1.3,entry_enter_invisible,entry_leave_invisible})
 
       local function entry_enter(player,area)
         local user_id = vRP.getUserId({player})
@@ -724,15 +799,15 @@ local function build_client_propertys(source)
           vRP.openMenu({source,build_entry_menu(user_id, k)})
         end
       end
-
       local function entry_leave(player,area)
         vRP.closeMenu({player})
       end
 
-      vRPclient.addBlip(source,{x,y,z,v.blipid,v.blipcolor,k})
-      vRPclient.addMarker(source,{x,y,z-1,0.7,0.7,0.5,0,255,125,125,150})
+      vRPclient.addMarker(source,{x,y,z-1,1,1,0.5,0,255,125,125,50})
+      vRP.setArea({source,"vRP:property_m",x,y,z,1,1.5,entry_enter,entry_leave})
 
-      vRP.setArea({source,"vRP:property"..k,x,y,z,1,1.5,entry_enter,entry_leave})
+
+      vRPclient.addBlip(source,{x,y,z,v.blipid,v.blipcolor,k})
     end
   end
 end
@@ -757,7 +832,6 @@ AddEventHandler("vRP:playerLeave",function(user_id, player)
   end
 end)
 
-
 function task_save_datatables()
   TriggerEvent("vRP:save")
 
@@ -773,7 +847,6 @@ function task_save_datatables()
   Debug.pend()
   SetTimeout(60*1000, task_save_datatables)
 end
-
 function task_sql()
   for k,v in pairs(cfg.propertys) do
 	vRPps.getUserBypAddress(k,function(var)
@@ -782,10 +855,8 @@ function task_sql()
 	  end
 	end)
   end
-  SetTimeout(30*1000, task_save_datatables)
+  SetTimeout(60*1000, task_save_datatables)
 end
 MySQL.ready(function ()
-  SetTimeout(5000, task_sql)
+  SetTimeout(10000, task_sql)
 end)
-
-
