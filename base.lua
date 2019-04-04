@@ -110,20 +110,6 @@ function vRPps.getproperty_employees(property,user_id,switch)
   end
 end
 --
-
-function vRPps.SalaryRun()
-    local employees, salary = vRPps.getproperty_employees(property,user_id,"2")
-    if type(employees) == "table" then 
-	  for k,v in pairs(employees) do
-	    
-	    if tonumber(k) == tonumber(user_id) then
-		  do return true end
-	    end
-		
-	  end
-    end
-end
---
 function vRPps.isEmployee(property,user_id)
   local data = vRPps.property_employees(property)
   if type(data) == "table" then 
@@ -270,7 +256,12 @@ function vRPps.UpdatePropertyInfo(price,amount,stype)
   end)
 end
 
-
+function vRPps.UpdatePropertyInfoSalary(price,stype)
+  vRPps.getPropertyEarned(stype, function(earned)
+	local earned = earned-price
+	MySQL.Async.execute('UPDATE vrp_user_properties SET earned = @earned WHERE property = @stype', {['@earned'] = earned, ['@stype'] = stype})
+  end)
+end
 
 
 
@@ -279,7 +270,7 @@ end
 --
 function vRPps.getUserpAddress(user_id, cbr)
   local task = Task(cbr)
-  MySQL.Async.fetchAll('SELECT property, number FROM vrp_user_properties WHERE user_id = @user_id', {['@user_id'] = user_id}, function(result)
+  MySQL.Async.fetchAll('SELECT user_id, property, number FROM vrp_user_properties WHERE user_id = @user_id', {['@user_id'] = user_id}, function(result)
     task({result[1]})
   end)
 end
@@ -506,7 +497,7 @@ local function areas(player,stype,sid,x,y,z,entry_enter,entry_leave,switch)
 end
 
 -- leave slot
-local function leave_slot(user_id,player,stype,sid) -- called when a player leave a slot
+function vRPps.leave_slot(user_id,player,stype,sid) -- called when a player leave a slot
   print(user_id.." leave slot "..stype.." "..sid)
   local slot = uslots[stype][sid]
   local property = cfg.propertys[slot.property_name]
@@ -540,7 +531,7 @@ local function leave_slot(user_id,player,stype,sid) -- called when a player leav
       local function entry_leave_invisible(player,area)
       end
 
-	  SetTimeout(1500, function()
+	  SetTimeout(2000, function()
 	    areas_out(player,stype,sid,x,y,z,entry_enter_invisible,entry_leave_invisible,"1")
 	  end)
 
@@ -586,7 +577,7 @@ local function enter_slot(user_id,player,stype,sid) -- called when a player ente
 	if vRPps.is_in_slot(user_id,stype) then
 	  vRPclient.notify(player,{"Bye Bye, come again please!"})
 
-	  leave_slot(user_id,player,stype,sid)
+	  vRPps.leave_slot(user_id,player,stype,sid)
 	end
   end
 
@@ -599,7 +590,7 @@ local function enter_slot(user_id,player,stype,sid) -- called when a player ente
     if name == "entry" then
 	  areas(player,stype,sid,x,y,z,entry_enter,entry_leave,"0")
 	  
-	  SetTimeout(1500, function()
+	  SetTimeout(2000, function()
 		areas(player,stype,sid,x,y,z,entry_enter,entry_leave,"1")
 	  end)
 
@@ -656,8 +647,8 @@ local function build_entry_menu(user_id, property_name)
   local menu = {name=property_name,css={top="75px",header_color="rgba(0,255,125,0.75)"}}
 
   menu[lang.property.buy.title()] = {function(player,choice)
-    vRPps.getUserpAddress(user_id, function(address)
-      if address == nil then -- check if not already have a property
+    --vRPps.getUserpAddress(user_id, function(address)
+      --if address == nil then -- check if not already have a property
         vRPps.findFreeNumber(property_name, property.max, function(number)
           if number ~= nil then
 		     vRP.request({player,"Do you want to buy this property and create a business?",15,function(player,ok)
@@ -686,10 +677,10 @@ local function build_entry_menu(user_id, property_name)
             vRPclient.notify(player,{lang.property.buy.full()})
           end
         end)
-      else
-        vRPclient.notify(player,{lang.property.buy.have_property()})
-      end
-    end)
+      --else
+        --vRPclient.notify(player,{lang.property.buy.have_property()})
+      --end
+    --end)
   end, lang.property.buy.description({property.buy_price})}
 
   menu[lang.property.sell.title()] = {function(player,choice)
@@ -790,7 +781,6 @@ local function build_client_propertys(source)
       end
 	  local m = tostring(k)
 	  local nid = "vRP:property:entry"..m
-	  --vRPclient.setNamedMarker(source,{nid,ix,iy,iz-1,1.3,1.3,0.5,0,255,255,255,50})
       vRP.setArea({source,nid,ix,iy,iz,1.3,1.3,entry_enter_invisible,entry_leave_invisible})
 
       local function entry_enter(player,area)
@@ -804,7 +794,7 @@ local function build_client_propertys(source)
       end
 
       vRPclient.addMarker(source,{x,y,z-1,1,1,0.5,0,255,125,125,50})
-      vRP.setArea({source,"vRP:property_m",x,y,z,1,1.5,entry_enter,entry_leave})
+      vRP.setArea({source,"vRP:property:menu"..m,x,y,z,1,1.5,entry_enter,entry_leave})
 
 
       vRPclient.addBlip(source,{x,y,z,v.blipid,v.blipcolor,k})
@@ -819,7 +809,7 @@ AddEventHandler("vRP:playerSpawn",function(user_id, source, first_spawn)
     -- leave slot if inside one
     local tmp = vRP.getUserTmpTable({user_id})
     if tmp and tmp.property_stype then
-      leave_slot(user_id, source, tmp.property_stype, tmp.property_sid)
+      vRPps.leave_slot(user_id, source, tmp.property_stype, tmp.property_sid)
     end
   end
 end)
@@ -828,9 +818,41 @@ AddEventHandler("vRP:playerLeave",function(user_id, player)
   -- leave slot if inside one
   local tmp = vRP.getUserTmpTable({user_id})
   if tmp and tmp.property_stype then
-    leave_slot(user_id, player, tmp.property_stype, tmp.property_sid)
+    vRPps.leave_slot(user_id, player, tmp.property_stype, tmp.property_sid)
   end
 end)
+
+
+
+function vRPps.SalaryRun()
+  for k,v in pairs(cfg.propertys) do
+	vRPps.getUserBypAddress(k,function(var)
+      if var ~= nil then
+		local employees = vRPps.getproperty_employees(k,"","0")
+		if type(employees) == "table" then 
+		  for x,y in pairs(employees) do
+			if vRP.isConnected({tonumber(x)}) then
+			  local salary = vRPps.getproperty_employees(k,x,"1")
+			  vRPps.getPropertyEarned(k, function(earned)
+			  	local player = vRP.getUserSource({tonumber(x)})
+				if earned >= salary then -- enough, simple payment
+				  vRP.giveBankMoney({tonumber(x),salary})
+				  vRPps.UpdatePropertyInfoSalary(salary,k)
+				  vRPclient.notify(player,{"Your boss from "..k.." paid your salary!!"})
+				else
+				  vRPclient.notify(player,{"Your boss from "..k.." cannot pay your salary!!"})
+			    end
+			  end)
+			end
+		  end
+		end
+	  end
+	end)
+  end
+ SetTimeout(15*60000, vRPps.SalaryRun)
+end
+
+
 
 function task_save_datatables()
   TriggerEvent("vRP:save")
@@ -856,7 +878,10 @@ function task_sql()
 	end)
   end
   SetTimeout(60*1000, task_save_datatables)
+  SetTimeout(60000, vRPps.SalaryRun)
 end
 MySQL.ready(function ()
   SetTimeout(10000, task_sql)
 end)
+
+
