@@ -99,14 +99,26 @@ function vRPps.setproperty_employees(property,user_id,value,salary)
 end
 --
 function vRPps.getproperty_employees(property,user_id,switch)
-  if switch == "2" then 
-    local employees = vRPps.property_Employeetables[property].employees
-	local salary = vRPps.property_Employeetables[property].salary[user_id]
-    return employees, salary 
-  elseif switch == "1" then 
-    return vRPps.property_Employeetables[property].salary[user_id]
+  if switch == "2" then
+    if vRPps.property_Employeetables[property].employees ~= nil and vRPps.property_Employeetables[property].salary[user_id] ~= nil then
+      local employees = vRPps.property_Employeetables[property].employees
+	  local salary = vRPps.property_Employeetables[property].salary[user_id]
+      return employees, salary
+	else
+	  return "",""
+	end
+  elseif switch == "1" then
+	if vRPps.property_Employeetables[property].salary[user_id] ~= nil then
+      return vRPps.property_Employeetables[property].salary[user_id]
+	else
+	  return ""
+	end
   else
-	return vRPps.property_Employeetables[property].employees
+    if vRPps.property_Employeetables[property].employees ~= nil then
+	  return vRPps.property_Employeetables[property].employees
+	else
+	  return ""
+	end
   end
 end
 --
@@ -498,7 +510,6 @@ end
 
 -- leave slot
 function vRPps.leave_slot(user_id,player,stype,sid) -- called when a player leave a slot
-  print(user_id.." leave slot "..stype.." "..sid)
   local slot = uslots[stype][sid]
   local property = cfg.propertys[slot.property_name]
 
@@ -531,7 +542,7 @@ function vRPps.leave_slot(user_id,player,stype,sid) -- called when a player leav
       local function entry_leave_invisible(player,area)
       end
 
-	  SetTimeout(2000, function()
+	  SetTimeout(3000, function()
 	    areas_out(player,stype,sid,x,y,z,entry_enter_invisible,entry_leave_invisible,"1")
 	  end)
 
@@ -551,14 +562,12 @@ function vRPps.leave_slot(user_id,player,stype,sid) -- called when a player leav
   end
 
   if is_empty(slot.players) then -- free the slot
-    print("free slot "..stype.." "..sid)
     freeSlot(stype,sid)
   end
 end
 
 -- enter slot
 local function enter_slot(user_id,player,stype,sid) -- called when a player enter a slot
-  print(user_id.." enter slot "..stype.." "..sid)
   local slot = uslots[stype][sid]
   local property = cfg.propertys[slot.property_name]
 
@@ -590,7 +599,7 @@ local function enter_slot(user_id,player,stype,sid) -- called when a player ente
     if name == "entry" then
 	  areas(player,stype,sid,x,y,z,entry_enter,entry_leave,"0")
 	  
-	  SetTimeout(2000, function()
+	  SetTimeout(3000, function()
 		areas(player,stype,sid,x,y,z,entry_enter,entry_leave,"1")
 	  end)
 
@@ -822,8 +831,6 @@ AddEventHandler("vRP:playerLeave",function(user_id, player)
   end
 end)
 
-
-
 function vRPps.SalaryRun()
   for k,v in pairs(cfg.propertys) do
 	vRPps.getUserBypAddress(k,function(var)
@@ -849,11 +856,8 @@ function vRPps.SalaryRun()
 	  end
 	end)
   end
- SetTimeout(15*60000, vRPps.SalaryRun)
+ SetTimeout(30*60000, vRPps.SalaryRun)
 end
-
-
-
 function task_save_datatables()
   TriggerEvent("vRP:save")
 
