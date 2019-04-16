@@ -180,11 +180,8 @@ function vRPps.propertyGetlockStatus(property)
   end
   do return current,option,new,numberrr end
 end
-
-
 -- price adjustments data tables (logger storage, saved to database) and their associated functions
 --
-
 vRPps.property_adjustments = {}
 --
 function vRPps.propertyGetadjustments(property)
@@ -275,10 +272,6 @@ function vRPps.UpdatePropertyInfoSalary(price,stype)
   end)
 end
 
-
-
-
-
 --
 function vRPps.getUserpAddress(user_id, cbr)
   local task = Task(cbr)
@@ -355,7 +348,24 @@ function vRPps.getUserBusiness(user_id, property, cbr) --, cbr
   end
 end
 --
-
+function vRPps.getUserBusinesses(user_id, cbr)
+  local task = Task(cbr)
+  local var = {}
+  local count = 1
+  if user_id ~= nil then
+    for k,v in pairs(cfg.propertys) do
+	  vRPps.getUserBusiness(user_id,k,function(business)
+		if business ~= nil then  
+		  var[count].business = business
+		  count = count +1
+		end
+	  end)
+	end
+	task({var})
+  else
+    task()
+  end
+end
 -- close the business of an user
 function vRPps.closeBusiness(user_id,property)
   MySQL.Async.execute('DELETE FROM vrp_user_business WHERE user_id = @user_id and property = @property', {['@user_id'] = user_id, ['@property'] = property})
@@ -459,6 +469,7 @@ local function is_empty(table)
 end
 
 function vRPps.QuickAccess(user_id, property_name)
+ local property = cfg.propertys[property_name]
   local player = vRP.getUserSource({user_id})
   vRPps.getUserBypAddress(property_name,function(huser_id)
 	if huser_id ~= nil then
@@ -469,6 +480,9 @@ function vRPps.QuickAccess(user_id, property_name)
 			vRPclient.notify(player,{lang.property.intercom.not_available()})
 			do return end
 		  end
+		  if property.tp then
+		    vRPclient.teleport(player,property.tp_point)
+		  end		  
 		  if huser_id == user_id then
 			vRPclient.notify(player,{"Welcome Boss!"})
 			do return end
@@ -522,7 +536,9 @@ function vRPps.leave_slot(user_id,player,stype,sid) -- called when a player leav
 
   -- teleport to property entry point (outside)
   --vRPclient.teleport(player, property.entry_point) -- already an array of params (x,y,z)
-
+  if property.tp then
+	vRPclient.teleport(player, property.entry_point)
+  end
   -- uncount player
   slot.players[user_id] = nil
 
@@ -531,6 +547,9 @@ function vRPps.leave_slot(user_id,player,stype,sid) -- called when a player leav
     local name,x,y,z = table.unpack(v)
 
     if name == "entry" then
+	  if property.tp then 
+	   x,y,z = table.unpack(property.entry_point)
+	  end
 	  areas_out(player,stype,sid,x,y,z,entry_enter_invisible,entry_leave_invisible,"0")
       local function entry_enter_invisible(player,area)
         local user_id = vRP.getUserId({player})
@@ -585,7 +604,7 @@ local function enter_slot(user_id,player,stype,sid) -- called when a player ente
   local function entry_enter(player,area)
 	if vRPps.is_in_slot(user_id,stype) then
 	  vRPclient.notify(player,{"Bye Bye, come again please!"})
-
+		
 	  vRPps.leave_slot(user_id,player,stype,sid)
 	end
   end
@@ -831,6 +850,44 @@ AddEventHandler("vRP:playerLeave",function(user_id, player)
   end
 end)
 
+
+
+local choice_askinsurance = {function(player,choice)
+  vRPclient.getNearestPlayer(player,{10},function(nplayer)
+    local nuser_id = vRP.getUserId({nplayer})
+    if nuser_id ~= nil then
+      vRPclient.notify(player,{"Insurance..."})
+      vRP.request({nplayer,"Do you want to show your insurance papers?",15,function(nplayer,ok)
+        if ok then
+		  MySQL.Async.fetchAll("SELECT * FROM vrp_users WHERE id = @id AND CarInsurance = 'Yes'", {['@id'] = nuser_id}, function(result)
+            if #result > 0 then
+			  vRPclient.notify(player,{"Insurance: ~g~Yes!"})
+			else
+			  vRPclient.notify(player,{"Insurance: ~r~None!"})
+            end
+		  end)
+        else
+          vRPclient.notify(player,{lang.common.request_refused()})
+        end
+      end})
+    else
+      vRPclient.notify(player,{lang.common.no_player_near()})
+    end
+  end)
+end, "Check the person his/her insurance status."}
+
+vRP.registerMenuBuilder({"police", function(add, data)
+  local player = data.player
+  local user_id = vRP.getUserId({player})
+  if user_id ~= nil then
+    local choices = {}
+    if vRP.hasPermission({user_id,"police.askid"}) then
+       choices["Check insurance"] = choice_askinsurance
+    end
+    add(choices)
+  end
+end})
+
 function vRPps.SalaryRun()
   for k,v in pairs(cfg.propertys) do
 	vRPps.getUserBypAddress(k,function(var)
@@ -887,5 +944,7 @@ end
 MySQL.ready(function ()
   SetTimeout(10000, task_sql)
 end)
+
+
 
 
